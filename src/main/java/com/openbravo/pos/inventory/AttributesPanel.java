@@ -46,14 +46,17 @@ public class AttributesPanel extends JPanelTable2 {
         
         row = new Row(
                 new Field("ID", Datas.STRING, Formats.STRING),
-                new Field(AppLocal.getIntString("label.name"), Datas.STRING, Formats.STRING, true, true, true)
+                new Field(AppLocal.getIntString("label.name"), Datas.STRING, Formats.STRING, true, true, true),
+                new Field("IS_TIME_TYPE", Datas.BOOLEAN, Formats.BOOLEAN)
         );
         
         Table table = new Table(
                 "attribute",
                 new PrimaryKey("ID"),
-                new Column("NAME"));
-        
+                new Column("NAME"),
+                new Column("IS_TIME_TYPE")
+                );
+
         lpr = row.getListProvider(app.getSession(), table);
         spr = row.getSaveProvider(app.getSession(), table);        
         

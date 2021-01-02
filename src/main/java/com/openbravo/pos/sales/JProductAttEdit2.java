@@ -37,9 +37,17 @@ import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Frame;
 import java.awt.Window;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
+import java.time.temporal.TemporalField;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import javax.swing.SwingUtilities;
 
 /**
@@ -95,18 +103,18 @@ public class JProductAttEdit2 extends javax.swing.JDialog {
                 new SerializerWriteBasic(Datas.STRING, Datas.STRING),
                 SerializerReadString.INSTANCE);
 
-        attinstSent = new PreparedSentence(s, "SELECT A.ID, A.NAME, " + s.DB.CHAR_NULL() + ", " + s.DB.CHAR_NULL() + " " +
+        attinstSent = new PreparedSentence(s, "SELECT A.ID, A.NAME, A.IS_TIME_TYPE, " + s.DB.CHAR_NULL() + ", " + s.DB.CHAR_NULL()+ ", " + s.DB.CHAR_NULL() + " " +
                 "FROM attributeuse AU JOIN attribute A ON AU.ATTRIBUTE_ID = A.ID " +
                 "WHERE AU.ATTRIBUTESET_ID = ? " +
                 "ORDER BY AU.LINENO",
             SerializerWriteString.INSTANCE,
-                (DataRead dr) -> new AttributeInstInfo(dr.getString(1), dr.getString(2), dr.getString(3), dr.getString(4)));
-        attinstSent2 = new PreparedSentence(s, "SELECT A.ID, A.NAME, AI.ID, AI.VALUE " +
+                (DataRead dr) -> new AttributeInstInfo(dr.getString(1), dr.getString(2), dr.getBoolean(3), dr.getString(4), dr.getString(5)));
+        attinstSent2 = new PreparedSentence(s, "SELECT A.ID, A.NAME, A.IS_TIME_TYPE, AI.ID, AI.VALUE " +
             "FROM attributeuse AU JOIN attribute A ON AU.ATTRIBUTE_ID = A.ID LEFT OUTER JOIN attributeinstance AI ON AI.ATTRIBUTE_ID = A.ID " +
             "WHERE AU.ATTRIBUTESET_ID = ? AND AI.ATTRIBUTESETINSTANCE_ID = ?" +
             "ORDER BY AU.LINENO",
             new SerializerWriteBasic(Datas.STRING, Datas.STRING),
-                (DataRead dr) -> new AttributeInstInfo(dr.getString(1), dr.getString(2), dr.getString(3), dr.getString(4)));
+                (DataRead dr) -> new AttributeInstInfo(dr.getString(1), dr.getString(2), dr.getBoolean(3), dr.getString(4), dr.getString(5)));
                 attvaluesSent = new PreparedSentence(s, "SELECT VALUE FROM attributevalue WHERE ATTRIBUTE_ID = ? ORDER BY VALUE",
                 SerializerWriteString.INSTANCE,
                 SerializerReadString.INSTANCE);
@@ -175,7 +183,10 @@ public class JProductAttEdit2 extends javax.swing.JDialog {
                 JProductAttEditI item;
 
                 List<String> values = attvaluesSent.list(aii.getAttid());
-                if (values.isEmpty()) {
+                if (aii.attIsTimeType) {
+                    // Does not exist a list of values then a textfield
+                    item = new JProductAttEditTimeItem(aii.getAttid(),  aii.getAttname(), aii.getValue(), m_jKeys);
+                }else if (values.isEmpty()) {
                     // Does not exist a list of values then a textfield
                     item = new JProductAttEditItem(aii.getAttid(),  aii.getAttname(), aii.getValue(), m_jKeys);
                 } else {
@@ -217,16 +228,22 @@ public class JProductAttEdit2 extends javax.swing.JDialog {
         return attInstanceDescription;
     }
 
+    public List<JProductAttEditI> getItemslist() {
+        return itemslist;
+    }
+
     private static class AttributeInstInfo {
         
         private final String attid;
         private final String attname;
+        private final Boolean attIsTimeType;
         private String id;
         private String value;
 
-        public AttributeInstInfo(String attid, String attname, String id, String value) {
+        public AttributeInstInfo(String attid, String attname, Boolean attIsTimeType, String id, String value) {
             this.attid = attid;
             this.attname = attname;
+            this.attIsTimeType = attIsTimeType;
             this.id = id;
             this.value = value;
         }
@@ -354,14 +371,53 @@ public class JProductAttEdit2 extends javax.swing.JDialog {
     private void m_jButtonOKActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_m_jButtonOKActionPerformed
 
         StringBuilder description = new StringBuilder();
-        itemslist.stream().map((item) -> item.getValue())
-            .filter((value) -> (value != null && value.length() > 0))
-            .forEach((value) -> {                    
+        itemslist.stream()
+            .filter((item) -> (item.getValue() != null && item.getValue().length() > 0))
+            .forEach((item) -> {
                 if (description.length() > 0) {
-                    description.append(", ");
+                    description.append(",");
+                }
+                String value = item.getValue();
+                if(item instanceof JProductAttEditTimeItem){
+                    TemporalAccessor temporalAccessor = DateTimeFormatter.ofPattern("dd/MM/yyyy hh:mm:ss a").parse(value);
+                    value = DateTimeFormatter.ofPattern("hh:mma").format(temporalAccessor);
                 }
                 description.append(value);
             });
+        List<JProductAttEditI> list = itemslist.stream()
+                .filter((item) -> (item.getValue() != null && item.getValue().length() > 0))
+                .filter(item -> item instanceof JProductAttEditTimeItem)
+                .collect(Collectors.toList());
+
+        if (list.size() >= 2){
+            String dateStart = list.get(0).getValue();
+            String dateStop = list.get(1).getValue();
+
+            //Custom date format
+            SimpleDateFormat format = new SimpleDateFormat("dd/MM/yyyy hh:mm:ss a");
+
+            Date d1 = null;
+            Date d2 = null;
+            try {
+                d1 = format.parse(dateStart);
+                d2 = format.parse(dateStop);
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+            String durationStr = "";
+            // Get msec from each, and subtract.
+            long diff = d2.getTime() - d1.getTime();
+            if(diff>0) {
+                long diffHours = diff / (60 * 60 * 1000);
+                durationStr += diffHours + "h";
+                if (diffHours > 0) {
+                    diff -= (diffHours * (60 * 60 * 1000));
+                }
+                long diffMinutes = diff / (60 * 1000) % 60;
+                durationStr += diffMinutes + "m";
+                description.append(","+durationStr);
+            }
+        }
 
         String id;
 

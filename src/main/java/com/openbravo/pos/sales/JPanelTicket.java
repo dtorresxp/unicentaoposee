@@ -75,9 +75,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.text.DecimalFormat;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.print.PrintService;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -2913,6 +2915,30 @@ System.out.println("PanelContainer : Focus Lost");
                 if (attedit.isOK()) {
                     line.setProductAttSetInstId(attedit.getAttributeSetInst());
                     line.setProductAttSetInstDesc(attedit.getAttributeSetInstDescription());
+
+                    List<JProductAttEditI> list = attedit.getItemslist().stream()
+                            .filter((item) -> (item.getValue() != null && item.getValue().length() > 0))
+                            .filter(item -> item instanceof JProductAttEditTimeItem)
+                            .collect(Collectors.toList());
+
+                    String des = attedit.getAttributeSetInstDescription();
+                    String[] attDescs = des.split(",");
+                    if(attDescs.length > 2){
+                        double hrs = 0;
+                        double hrFraction = 0;
+                        String[] split1 = attDescs[2].split("h");
+                        if (split1.length>0) {
+                            hrs = Integer.valueOf(split1[0]);
+                        }
+                        if(split1.length>1) {
+                            double mins = Integer.valueOf(split1[1].split("m")[0]);
+                            hrFraction = mins / 60.0;
+                        }
+                        DecimalFormat f = new DecimalFormat("##.0");
+                        line.setMultiply(hrs + Double.parseDouble(f.format(hrFraction)));
+                    }
+
+
                     paintTicketLine(i, line);
                 }
             } catch (BasicException ex) {
@@ -3184,8 +3210,13 @@ System.out.println("PanelContainer : Focus Lost");
         if (listener  != null) {
             listener.stop();
         }
-        Object[] options = {"Create", "Find","Cancel"};
-        
+        Object[] options
+                = {
+                AppLocal.getIntString("cboption.create"),
+                AppLocal.getIntString("cboption.find"),
+                AppLocal.getIntString("button.cancel")
+        };
+
         int n = JOptionPane.showOptionDialog(null,
             AppLocal.getIntString("message.customeradd"),
             AppLocal.getIntString("label.customer"),            
